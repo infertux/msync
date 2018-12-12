@@ -1,0 +1,175 @@
+#!/bin/bash
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+set -euo pipefail
+
+# FUNCTIONS & HELPERS
+
+usage() {
+    cat >&2 <<USAGE
+    Usage: $0 [options] <source_uri> <destination_path>
+
+    <source_uri> The source URI starting with rsync:// where you want to sync from.
+    <destination_path> The directory where to sync to.
+
+    msync options:
+
+    --last-update-url Blah man man
+    --rsync-options Can be repeated
+
+    Examples:
+      $0 -v -n rsync://rsync.samba.org/rsyncftp/ $PWD/rsync/
+      $0 --bwlimit=5m rsync://foo.bar/archlinux /srv/mirror/archlinux
+      $0 rsync://foo.bar/archlinux /srv/mirror/archlinux --last-update-url=http://foo.bar/archlinux/lastupdate
+USAGE
+
+    exit 1
+}
+
+rsync_cmd() {
+    local source=$1
+    local destination=${2:-}
+
+    local -a cmd=(ionice -c 3 rsync)
+    cmd+=(--human-readable --no-motd --recursive)
+    cmd+=(--times --perms)
+    cmd+=(--links --safe-links --hard-links --sparse)
+    cmd+=(--delete-delay --delay-updates --temp-dir="${temp_dir}")
+    cmd+=(--timeout=300 --contimeout=30)
+
+    test -z "$verbose" || cmd+=(--verbose --progress --stats)
+
+    cmd=("${cmd[@]}" "${rsync_options[@]}")
+    cmd+=("$source")
+
+    test -z "$destination" || cmd+=("$destination")
+
+    verbose "About to run:" "${cmd[@]}"
+    verbose ""
+    "${cmd[@]}"
+    exit_status=$?
+    verbose ""
+    verbose "rsync exited with $exit_status"
+    return $exit_status
+}
+
+verbose() {
+    test -z "$verbose" || echo >&2 "$@"
+}
+
+# DEFAULT OPTIONS
+
+verbose=""
+tty -s && verbose=1
+
+rsync_uri=""
+destination_path=""
+last_update_url=""
+last_update_sync=""
+warning_timeout=300
+random_delay=1
+
+declare -a rsync_options
+
+# PARSE OPTIONS
+
+[ $# -ge 1 ] || usage
+
+while true; do
+    case ${1:-} in
+    "") break;;
+    rsync://*) rsync_uri=$1; shift;;
+    --verbose) verbose=1; shift;;
+    --quiet) verbose=""; shift;;
+    --dry-run) rsync_options+=("$1"); shift;;
+    --id) shift; id=$1; shift;;
+    --last-update-url) shift; last_update_url=$1; shift;;
+    --last-update-sync) shift; last_update_sync=$1; shift;;
+    --random-delay) shift; random_delay=$1; shift;;
+    --warning-timeout) shift; warning_timeout=$1; shift;;
+    --rsync-options) shift; rsync_options+=("$1"); shift;;
+    *) destination_path=$(readlink -f "$1"); shift;;
+    esac
+done
+
+id=$(echo "$destination_path" | tr '/' '-')
+id=${id#-} # trim prefix
+id=${id%-} # trim suffix
+[ "$id" ] || id="temp"
+
+# Directory where files are downloaded to before being moved in place.
+# This should be on the same filesystem as $destination_path, but not a
+# subdirectory of $destination_path.
+temp_dir="/tmp/msync-${id}"
+lock_file="/tmp/msync-${id}.lck"
+
+if [[ "$last_update_sync" && -z "$last_update_url" ]]; then
+     echo >&2 "--last-update-sync requires --last-update-url to be set."
+     exit 1
+fi
+
+verbose "Verbose mode is on"
+
+# SET UP FOR SYNC
+
+exec 9>"${lock_file}"
+flock -n 9 || { verbose "${lock_file} present. Exiting."; exit 0; }
+
+exit_handler() {
+    [ $SECONDS -le "$warning_timeout" ] || echo >&2 "Warning: msync took $SECONDS s"
+
+    [ ! -d $temp_dir ] || rmdir $temp_dir
+    rm $lock_file
+    verbose "msync cleaned up successfully, bye."
+}
+
+trap exit_handler EXIT
+
+[ -z "$destination_path" ] || [ -d "${destination_path}" ] || mkdir -p "${destination_path}"
+[ -d "${temp_dir}" ] || mkdir -p "${temp_dir}"
+
+tty -s || {
+    delay=$((RANDOM % random_delay))
+    warning_timeout=$((warning_timeout + delay))
+    sleep $delay
+}
+
+if [ "$last_update_url" ]; then
+    last_update_file="$destination_path/${last_update_url##*/}"
+
+    if [ -f "$last_update_file" ]; then
+        verbose "Checking whether ${last_update_url} is different than ${last_update_file}"
+
+        if diff -b <(curl -Ls "$last_update_url") "$last_update_file" >/dev/null; then
+            verbose "Files are identical, doing partial sync"
+            verbose "Syncing ${rsync_uri}${last_update_sync}"
+
+            rsync_cmd "${rsync_uri}${last_update_sync}" "${destination_path}/"
+            exit $?
+        else
+            verbose "Files are different, doing full sync"
+        fi
+    else
+        verbose "$last_update_file missing, doing full sync"
+    fi
+else
+    verbose "--last-update-url unset, doing full sync"
+fi
+
+if [ "$verbose" ]; then
+    rsync_cmd "${rsync_uri}" "${destination_path}"
+else
+    output=$(rsync_cmd "${rsync_uri}" "${destination_path}")
+fi
+
+exit_status=$?
+
+if [[ -z "$verbose" || $exit_status -ne 0 && $exit_status -ne 24 ]]; then
+    echo -n "$output"
+fi
+
+exit $exit_status
+
+# curl ... { id: foo, duration: 123, status: 0 } https://localhost/influxdb
+# curl ... { id: foo, size: 12G } https://localhost/influxdb
