@@ -36,8 +36,8 @@ rsync_cmd() {
     cmd+=(--human-readable --no-motd --recursive)
     cmd+=(--times --perms)
     cmd+=(--links --safe-links --hard-links --sparse)
-    cmd+=(--delete-delay --delay-updates --temp-dir="${temp_dir}")
-    cmd+=(--contimeout=60 --timeout=600)
+    cmd+=(--delete-delay --delay-updates "--temp-dir=${temp_dir}")
+    cmd+=("--contimeout=60" "--timeout=600")
 
     test -z "$verbose" || cmd+=(--verbose --progress --stats)
 
