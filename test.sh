@@ -7,4 +7,4 @@ cd $(dirname $0)
 gem install bashcov -N
 
 rm -rf coverage
-bashcov -- ./msync rsync://rsync.samba.org/rsyncftp/ /tmp/rsync/ --dry-run
+bashcov -- ./msync rsync://rsync.cyberbits.eu/ruby/ /tmp/msync/ --dry-run

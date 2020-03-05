@@ -16,11 +16,11 @@ usage() {
     msync options:
 
     --last-update-url Blah man man
-    --rsync-options Can be repeated
+    --rsync-option Can be repeated
 
     Examples:
-      $0 -v -n rsync://rsync.samba.org/rsyncftp/ $PWD/rsync/
-      $0 --bwlimit=5m rsync://foo.bar/archlinux /srv/mirror/archlinux
+      $0 --verbse --dry-run rsync://rsync.samba.org/rsyncftp/ $PWD/rsync/
+      $0 --rsync-option '--bwlimit=5m' rsync://foo.bar/archlinux /srv/mirror/archlinux
       $0 rsync://foo.bar/archlinux /srv/mirror/archlinux --last-update-url=http://foo.bar/archlinux/lastupdate
 USAGE
 
@@ -32,6 +32,7 @@ rsync_cmd() {
     local destination=${2:-}
 
     local -a cmd=(ionice -c 3 rsync)
+    cmd+=(--ipv4)
     cmd+=(--human-readable --no-motd --recursive)
     cmd+=(--times --perms)
     cmd+=(--links --safe-links --hard-links --sparse)
@@ -48,17 +49,26 @@ rsync_cmd() {
     verbose "About to run:" "${cmd[@]}"
     verbose ""
 
+    set +e
     if [ "$verbose" ]; then
         "${cmd[@]}"
+        exit_status=$?
     else
-        "${cmd[@]}" 2>&1 \
-        | grep -Ev '^file has vanished:' \
-        | grep -Ev '^rsync warning: some files vanished before they could be transferred'
+        output=$("${cmd[@]}" 2>&1)
+        exit_status=$?
     fi
+    set -e
 
-    exit_status=$?
     verbose ""
     verbose "rsync exited with $exit_status"
+
+    if [[ -z "$verbose" && $exit_status -ne 0 && $exit_status -ne 24 ]]; then
+        echo "$output"
+    fi
+
+    # Treat 24 as non-error
+    [ $exit_status -ne 24 ] || exit_status=0
+
     return $exit_status
 }
 
@@ -78,7 +88,7 @@ tty -s && verbose=1
 destination_path=""
 last_update_url=""
 last_update_sync=""
-warning_timeout=300
+warning_timeout=3600
 random_delay=1
 
 declare -a rsync_uris
@@ -100,7 +110,7 @@ while true; do
     --last-update-sync) shift; last_update_sync=$1; shift;;
     --random-delay) shift; random_delay=$1; shift;;
     --warning-timeout) shift; warning_timeout=$1; shift;;
-    --rsync-options) shift; rsync_options+=("$1"); shift;;
+    --rsync-option) shift; rsync_options+=("$1"); shift;;
     *) destination_path=$(readlink -m "$1"); shift;;
     esac
 done
@@ -185,19 +195,17 @@ else
     verbose "--last-update-url unset, doing full sync"
 fi
 
+set +e
 if [ "$verbose" ]; then
     rsync_cmd "${rsync_uri}" "${destination_path}"
 else
     output=$(rsync_cmd "${rsync_uri}" "${destination_path}")
 fi
-
 exit_status=$?
+set -e
 
-if [[ -z "$verbose" && $exit_status -ne 0 && $exit_status -ne 24 ]]; then
+if [[ -z "$verbose" && $exit_status -ne 0 ]]; then
     warn "$output"
 fi
 
 exit $exit_status
-
-# curl ... { id: foo, duration: 123, status: 0 } https://localhost/influxdb
-# curl ... { id: foo, size: 12G } https://localhost/influxdb
