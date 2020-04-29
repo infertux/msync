@@ -1,0 +1,8 @@
+image: "ruby:latest"
+
+before_script:
+  - apt-get update -qq && apt-get install -y -qq rsync
+
+test:
+  script:
+    - ./test.sh
