@@ -124,8 +124,9 @@ id=${id%-} # trim suffix
 # Directory where files are downloaded to before being moved in place.
 # This should be on the same filesystem as $destination_path, but not a
 # subdirectory of $destination_path.
-temp_dir="/tmp/msync-${id}"
-lock_file="/tmp/msync-${id}.lck"
+temp_dir="/srv/tmp/msync-${id}"
+lock_file="/srv/tmp/msync-${id}.lck"
+mkdir -p "$(dirname $lock_file)"
 
 if [[ "$last_update_sync" && -z "$last_update_url" ]]; then
      warn "--last-update-sync requires --last-update-url to be set."
