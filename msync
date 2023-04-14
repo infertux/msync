@@ -88,8 +88,9 @@ tty -s && verbose=1
 destination_path=""
 last_update_url=""
 last_update_sync=""
-warning_timeout=3600
+skip_connection_check=""
 random_delay=1
+warning_timeout=3600
 
 declare -a rsync_uris
 declare -a rsync_options
@@ -104,6 +105,7 @@ while true; do
     rsync://*) rsync_uris+=("$1"); shift;;
     --verbose) verbose=1; shift;;
     --quiet) verbose=""; shift;;
+    --skip-connection-check) skip_connection_check=1; shift;;
     --dry-run) rsync_options+=("$1"); shift;;
     --id) shift; id=$1; shift;;
     --last-update-url) shift; last_update_url=$1; shift;;
@@ -158,16 +160,21 @@ tty -s || {
     sleep $delay
 }
 
-rsync_uri=""
-for uri in "${rsync_uris[@]}"; do
-    if rsync --no-motd --contimeout=10 --timeout=30 "$uri" >/dev/null; then
-        rsync_uri=$uri
-        verbose "${uri} is up, using it as upstream"
-        break
-    else
-        warn "${uri} is down, trying next upstream..."
-    fi
-done
+if [ "${skip_connection_check}" ]; then
+    rsync_uri=${rsync_uris[0]}
+    verbose "Skipping connection check and using ${rsync_uri}"
+else
+    rsync_uri=""
+    for uri in "${rsync_uris[@]}"; do
+        if rsync --no-motd --contimeout=10 --timeout=30 "$uri" >/dev/null; then
+            rsync_uri=$uri
+            verbose "${uri} is up, using it as upstream"
+            break
+        else
+            warn "${uri} is down, trying next upstream..."
+        fi
+    done
+fi
 
 if [ -z "$rsync_uri" ]; then
     warn "Could not find any valid upstreams, aborting."
