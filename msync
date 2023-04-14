@@ -32,7 +32,6 @@ rsync_cmd() {
     local destination=${2:-}
 
     local -a cmd=(ionice -c 3 rsync)
-    cmd+=(--ipv4)
     cmd+=(--human-readable --no-motd --recursive)
     cmd+=(--times --perms)
     cmd+=(--links --safe-links --hard-links --sparse)
