@@ -90,6 +90,7 @@ last_update_url=""
 last_update_sync=""
 skip_connection_check=""
 random_delay=1
+temporary_directory="/srv/tmp"
 warning_timeout=3600
 
 declare -a rsync_uris
@@ -103,6 +104,7 @@ while true; do
     case ${1:-} in
     "") break;;
     rsync://*) rsync_uris+=("$1"); shift;;
+    --help|-h) usage; ;;
     --verbose) verbose=1; shift;;
     --quiet) verbose=""; shift;;
     --skip-connection-check) skip_connection_check=1; shift;;
@@ -111,6 +113,7 @@ while true; do
     --last-update-url) shift; last_update_url=$1; shift;;
     --last-update-sync) shift; last_update_sync=$1; shift;;
     --random-delay) shift; random_delay=$1; shift;;
+    --temporary-directory) shift; temporary_directory=$1; shift;;
     --warning-timeout) shift; warning_timeout=$1; shift;;
     --rsync-option) shift; rsync_options+=("$1"); shift;;
     *) destination_path=$(readlink -m "$1"); shift;;
@@ -125,8 +128,8 @@ id=${id%-} # trim suffix
 # Directory where files are downloaded to before being moved in place.
 # This should be on the same filesystem as $destination_path, but not a
 # subdirectory of $destination_path.
-temp_dir="/srv/tmp/msync-${id}"
-lock_file="/srv/tmp/msync-${id}.lck"
+temp_dir="${temporary_directory}/msync-${id}"
+lock_file="${temporary_directory}/msync-${id}.lck"
 mkdir -p "$(dirname $lock_file)"
 
 if [[ "$last_update_sync" && -z "$last_update_url" ]]; then
