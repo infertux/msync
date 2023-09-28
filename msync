@@ -8,20 +8,28 @@ set -euo pipefail
 
 usage() {
     cat >&2 <<USAGE
-    Usage: $0 [options] <source_uri> <destination_path>
+Usage:
+  msync [options] <SOURCE> <DESTINATION>
 
-    <source_uri> The source URI starting with rsync:// where you want to sync from.
-    <destination_path> The directory where to sync to.
+  <SOURCE>       The source URI starting with rsync:// where you want to sync from.
+  <DESTINATION>  The directory path where to sync to.
 
-    msync options:
+Examples:
+  msync --dry-run rsync://rsync.samba.org/rsyncftp/ ${PWD}/rsync/
+  msync --rsync-option '--ipv4' --rsync-option '--bwlimit=5m' rsync://foo.bar/archlinux /srv/mirror/archlinux
+  msync rsync://foo.bar/archlinux /srv/mirror/archlinux --last-update-url=http://foo.bar/archlinux/lastupdate --last-update-sync lastsync --warning-timeout 1800
 
-    --last-update-url Blah man man
-    --rsync-option Can be repeated
-
-    Examples:
-      $0 --verbse --dry-run rsync://rsync.samba.org/rsyncftp/ ${PWD}/rsync/
-      $0 --rsync-option '--bwlimit=5m' rsync://foo.bar/archlinux /srv/mirror/archlinux
-      $0 rsync://foo.bar/archlinux /srv/mirror/archlinux --last-update-url=http://foo.bar/archlinux/lastupdate
+Options:
+  --verbose                Force verbose mode (verbose by default in TTYs)
+  --quiet                  Force quiet mode
+  --skip-connection-check  Skip initial connection check to rsync daemon
+  --dry-run                Don't perform actual transfer but shows what would happen
+  --last-update-url        Use timestamp file to do partial sync and save bandwidth
+  --last-update-sync       Use with --last-update-url
+  --random-delay           Add random delay before transfer to spread server load during multiple transfers
+  --temporary-directory    Customize temporary directory (not needed in most cases)
+  --warning-timeout        Warn if transfer takes more than timeout (in seconds)
+  --rsync-option           Pass additional options to rsync
 USAGE
 
     exit 1
