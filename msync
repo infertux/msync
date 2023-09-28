@@ -19,7 +19,7 @@ usage() {
     --rsync-option Can be repeated
 
     Examples:
-      $0 --verbse --dry-run rsync://rsync.samba.org/rsyncftp/ $PWD/rsync/
+      $0 --verbse --dry-run rsync://rsync.samba.org/rsyncftp/ ${PWD}/rsync/
       $0 --rsync-option '--bwlimit=5m' rsync://foo.bar/archlinux /srv/mirror/archlinux
       $0 rsync://foo.bar/archlinux /srv/mirror/archlinux --last-update-url=http://foo.bar/archlinux/lastupdate
 USAGE
@@ -38,18 +38,18 @@ rsync_cmd() {
     cmd+=(--delete-delay --delay-updates "--temp-dir=${temp_dir}")
     cmd+=("--contimeout=60" "--timeout=600")
 
-    test -z "$verbose" || cmd+=(--verbose --progress --stats)
+    [[ -z "${verbose}" ]] || cmd+=(--verbose --progress --stats)
 
     cmd=("${cmd[@]}" "${rsync_options[@]}")
-    cmd+=("$source")
+    cmd+=("${source}")
 
-    test -z "$destination" || cmd+=("$destination")
+    [[ -z "${destination}" ]] || cmd+=("${destination}")
 
     verbose "About to run:" "${cmd[@]}"
     verbose ""
 
     set +e
-    if [ "$verbose" ]; then
+    if [[ -n "${verbose}" ]]; then
         "${cmd[@]}"
         exit_status=$?
     else
@@ -59,21 +59,21 @@ rsync_cmd() {
     set -e
 
     verbose ""
-    verbose "rsync exited with $exit_status"
+    verbose "rsync exited with ${exit_status}"
 
-    if [[ -z "$verbose" && $exit_status -ne 0 && $exit_status -ne 23 && $exit_status -ne 24 ]]; then
-        echo "$output"
+    if [[ -z "${verbose}" && ${exit_status} -ne 0 && ${exit_status} -ne 23 && ${exit_status} -ne 24 ]]; then
+        echo "${output}"
     fi
 
-    # Treat partial transfers as non-error
-    [ $exit_status -ne 23 ] || exit_status=0
-    [ $exit_status -ne 24 ] || exit_status=0
+    # Treat partial transfers as non-errors
+    [[ "${exit_status}" -ne 23 ]] || exit_status=0
+    [[ "${exit_status}" -ne 24 ]] || exit_status=0
 
-    return $exit_status
+    return "${exit_status}"
 }
 
 verbose() {
-    test -z "$verbose" || warn "$@"
+    [[ -z "${verbose}" ]] || warn "$@"
 }
 
 warn() {
@@ -98,7 +98,7 @@ declare -a rsync_options
 
 # PARSE OPTIONS
 
-[ $# -ge 1 ] || usage
+[[ $# -ge 1 ]] || usage
 
 while true; do
     case ${1:-} in
@@ -120,19 +120,19 @@ while true; do
     esac
 done
 
-id=$(echo "$destination_path" | tr '/' '-')
+id=$(echo "${destination_path}" | tr '/' '-')
 id=${id#-} # trim prefix
 id=${id%-} # trim suffix
-[ "$id" ] || id="temp"
+[[ -n "${id}" ]] || id="temp"
 
 # Directory where files are downloaded to before being moved in place.
 # This should be on the same filesystem as $destination_path, but not a
 # subdirectory of $destination_path.
 temp_dir="${temporary_directory}/msync-${id}"
 lock_file="${temporary_directory}/msync-${id}.lck"
-mkdir -p "$(dirname $lock_file)"
+mkdir -p "$(dirname "${lock_file}")"
 
-if [[ "$last_update_sync" && -z "$last_update_url" ]]; then
+if [[ -n "${last_update_sync}" && -z "${last_update_url}" ]]; then
      warn "--last-update-sync requires --last-update-url to be set."
      exit 1
 fi
@@ -144,33 +144,34 @@ verbose "Verbose mode is on"
 exec 9>"${lock_file}"
 flock -n 9 || { verbose "${lock_file} present, exiting."; exit 0; }
 
+# shellcheck disable=SC2317
 exit_handler() {
-    [ $SECONDS -le "$warning_timeout" ] || warn "msync took $SECONDS s"
+    [[ "${SECONDS}" -le "${warning_timeout}" ]] || warn "msync took ${SECONDS} s"
 
-    [ ! -d $temp_dir ] || rmdir $temp_dir
-    rm $lock_file
+    [[ ! -d "${temp_dir}" ]] || rmdir "${temp_dir}"
+    rm "${lock_file}"
     verbose "msync cleaned up successfully, bye."
 }
 
 trap exit_handler EXIT
 
-[ -z "$destination_path" ] || [ -d "${destination_path}" ] || mkdir -p "${destination_path}"
-[ -d "${temp_dir}" ] || mkdir -p "${temp_dir}"
+[[ -z "${destination_path}" ]] || [[ -d "${destination_path}" ]] || mkdir -p "${destination_path}"
+[[ -d "${temp_dir}" ]] || mkdir -p "${temp_dir}"
 
 tty -s || {
     delay=$((RANDOM % random_delay))
     warning_timeout=$((warning_timeout + delay))
-    sleep $delay
+    sleep "${delay}"
 }
 
-if [ "${skip_connection_check}" ]; then
+if [[ -n "${skip_connection_check}" ]]; then
     rsync_uri=${rsync_uris[0]}
     verbose "Skipping connection check and using ${rsync_uri}"
 else
     rsync_uri=""
     for uri in "${rsync_uris[@]}"; do
-        if rsync --no-motd --contimeout=10 --timeout=30 "$uri" >/dev/null; then
-            rsync_uri=$uri
+        if rsync --no-motd --contimeout=10 --timeout=30 "${uri}" >/dev/null; then
+            rsync_uri=${uri}
             verbose "${uri} is up, using it as upstream"
             break
         else
@@ -179,18 +180,18 @@ else
     done
 fi
 
-if [ -z "$rsync_uri" ]; then
+if [[ -z "${rsync_uri}" ]]; then
     warn "Could not find any valid upstreams, aborting."
     exit 1
 fi
 
-if [ "$last_update_url" ]; then
-    last_update_file="$destination_path/${last_update_url##*/}"
+if [[ -n "${last_update_url}" ]]; then
+    last_update_file="${destination_path}/${last_update_url##*/}"
 
-    if [ -f "$last_update_file" ]; then
+    if [[ -f "${last_update_file}" ]]; then
         verbose "Checking whether ${last_update_url} is different than ${last_update_file}"
 
-        if diff -b <(curl -Ls "$last_update_url") "$last_update_file" >/dev/null; then
+        if diff -b <(curl -Ls "${last_update_url}" || true) "${last_update_file}" >/dev/null; then
             verbose "Files are identical, doing partial sync"
             verbose "Syncing ${rsync_uri}${last_update_sync}"
 
@@ -200,14 +201,14 @@ if [ "$last_update_url" ]; then
             verbose "Files are different, doing full sync"
         fi
     else
-        verbose "$last_update_file missing, doing full sync"
+        verbose "${last_update_file} missing, doing full sync"
     fi
 else
     verbose "--last-update-url unset, doing full sync"
 fi
 
 set +e
-if [ "$verbose" ]; then
+if [[ -n "${verbose}" ]]; then
     rsync_cmd "${rsync_uri}" "${destination_path}"
 else
     output=$(rsync_cmd "${rsync_uri}" "${destination_path}")
@@ -215,8 +216,8 @@ fi
 exit_status=$?
 set -e
 
-if [[ -z "$verbose" && $exit_status -ne 0 ]]; then
-    warn "$output"
+if [[ -z "${verbose}" && ${exit_status} -ne 0 ]]; then
+    warn "${output}"
 fi
 
-exit $exit_status
+exit "${exit_status}"
