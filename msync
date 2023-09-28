@@ -170,7 +170,7 @@ if [[ -n "${skip_connection_check}" ]]; then
 else
     rsync_uri=""
     for uri in "${rsync_uris[@]}"; do
-        if rsync --no-motd --contimeout=10 --timeout=30 "${uri}" >/dev/null; then
+        if rsync --no-motd --contimeout=10 --timeout=30 "${rsync_options[@]}" "${uri}" >/dev/null; then
             rsync_uri=${uri}
             verbose "${uri} is up, using it as upstream"
             break
