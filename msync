@@ -62,7 +62,15 @@ rsync_cmd() {
     cmd=("${cmd[@]}" "${rsync_options[@]}")
     cmd+=("${source}")
 
-    [[ -z "${destination}" ]] || cmd+=("${destination}")
+    if [[ -n "${destination}" ]]; then
+      # ensure destination is mounted
+      [[ -n "$(find "${destination}"/../ -mindepth 1 -type d 2> /dev/null || true)" ]] || {
+        warn "destination parent directory is empty, aborting"
+        return 1
+      }
+
+      cmd+=("${destination}")
+    fi
 
     verbose "About to run:" "${cmd[@]}"
     verbose ""
