@@ -88,13 +88,9 @@ rsync_cmd() {
     verbose ""
     verbose "rsync exited with ${exit_status}"
 
-    if [[ -z "${verbose}" && ${exit_status} -ne 0 && ${exit_status} -ne 23 && ${exit_status} -ne 24 ]]; then
+    if [[ -z "${verbose}" && ${exit_status} -ne 0 ]]; then
         echo "${output}"
     fi
-
-    # treat partial transfers as non-errors
-    [[ "${exit_status}" -ne 23 ]] || exit_status=0
-    [[ "${exit_status}" -ne 24 ]] || exit_status=0
 
     return "${exit_status}"
 }
