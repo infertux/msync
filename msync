@@ -20,7 +20,7 @@ Examples:
   msync rsync://foo.bar/archlinux /srv/mirror/archlinux --last-update-url=http://foo.bar/archlinux/lastupdate --last-update-sync lastsync --warning-timeout 1800
 
 Options:
-  --verbose                Force verbose mode (verbose by default in TTYs)
+  --verbose                Force verbose mode (verbose by default with systemd and in TTYs)
   --quiet                  Force quiet mode
   --checksum [0|1]         Whether to use checksum (0 = no, 1 = yes, empty (default) = random)
   --skip-connection-check  Skip initial connection check to rsync daemon
@@ -102,7 +102,8 @@ warn() {
 # DEFAULT OPTIONS
 
 verbose=""
-tty -s && verbose=1
+tty -s && verbose=1 # verbose in TTYS
+[[ -z "${INVOCATION_ID:-}" ]] || verbose=1 # verbose in systemd services
 
 checksum=""
 destination_path=""
