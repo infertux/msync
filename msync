@@ -22,6 +22,7 @@ Examples:
 Options:
   --verbose                Force verbose mode (verbose by default in TTYs)
   --quiet                  Force quiet mode
+  --checksum [0|1]         Whether to use checksum (0 = no, 1 = yes, empty (default) = random)
   --skip-connection-check  Skip initial connection check to rsync daemon
   --dry-run                Don't perform actual transfer but shows what would happen
   --last-update-url        Use timestamp file to do partial sync and save bandwidth
@@ -46,7 +47,17 @@ rsync_cmd() {
     cmd+=(--delete-delay --delay-updates "--temp-dir=${temp_dir}")
     cmd+=("--contimeout=60" "--timeout=600")
 
-    [[ -z "${verbose}" ]] || cmd+=(--verbose --progress --stats)
+    # set checksum=1 to force checksum when data corruption is present
+    if [[ "${checksum}" = 1 ]]; then
+      cmd+=(--checksum)
+    else
+      # unless checksum=0,
+      # enable checksum 1% of the time to catch random data corruptions
+      [[ -z "${checksum}" ]] || [[ $((RANDOM % 100)) -ne 0 ]] || cmd+=(--checksum)
+    fi
+
+    [[ -z "${verbose}" ]] || cmd+=(--verbose --stats)
+    [[ -z "${verbose}" ]] || ! tty -s || cmd+=(--progress) # progress outputs special characters so we only want it in TTYs
 
     cmd=("${cmd[@]}" "${rsync_options[@]}")
     cmd+=("${source}")
@@ -73,7 +84,7 @@ rsync_cmd() {
         echo "${output}"
     fi
 
-    # Treat partial transfers as non-errors
+    # treat partial transfers as non-errors
     [[ "${exit_status}" -ne 23 ]] || exit_status=0
     [[ "${exit_status}" -ne 24 ]] || exit_status=0
 
@@ -93,11 +104,12 @@ warn() {
 verbose=""
 tty -s && verbose=1
 
+checksum=""
 destination_path=""
-last_update_url=""
 last_update_sync=""
-skip_connection_check=""
+last_update_url=""
 random_delay=1
+skip_connection_check=""
 temporary_directory="/srv/tmp"
 warning_timeout=3600
 
@@ -113,17 +125,18 @@ while true; do
     "") break;;
     rsync://*) rsync_uris+=("$1"); shift;;
     --help|-h) usage; ;;
-    --verbose) verbose=1; shift;;
-    --quiet) verbose=""; shift;;
-    --skip-connection-check) skip_connection_check=1; shift;;
+    --checksum) shift; checksum=$1; shift;;
     --dry-run) rsync_options+=("$1"); shift;;
     --id) shift; id=$1; shift;;
-    --last-update-url) shift; last_update_url=$1; shift;;
     --last-update-sync) shift; last_update_sync=$1; shift;;
+    --last-update-url) shift; last_update_url=$1; shift;;
+    --quiet) verbose=""; shift;;
     --random-delay) shift; random_delay=$1; shift;;
-    --temporary-directory) shift; temporary_directory=$1; shift;;
-    --warning-timeout) shift; warning_timeout=$1; shift;;
     --rsync-option) shift; rsync_options+=("$1"); shift;;
+    --skip-connection-check) skip_connection_check=1; shift;;
+    --temporary-directory) shift; temporary_directory=$1; shift;;
+    --verbose) verbose=1; shift;;
+    --warning-timeout) shift; warning_timeout=$1; shift;;
     *) destination_path=$(readlink -m "$1"); shift;;
     esac
 done
@@ -193,7 +206,7 @@ if [[ -z "${rsync_uri}" ]]; then
     exit 1
 fi
 
-if [[ -n "${last_update_url}" ]]; then
+if [[ -n "${last_update_url}" ]] || [[ "${checksum}" = 1 ]]; then
     last_update_file="${destination_path}/${last_update_url##*/}"
 
     if [[ -f "${last_update_file}" ]]; then
@@ -212,7 +225,7 @@ if [[ -n "${last_update_url}" ]]; then
         verbose "${last_update_file} missing, doing full sync"
     fi
 else
-    verbose "--last-update-url unset, doing full sync"
+    verbose "--last-update-url unset or checksum enabled, doing full sync"
 fi
 
 set +e
