@@ -221,7 +221,7 @@ if [[ -n "${last_update_url}" ]] || [[ "${checksum}" = 1 ]]; then
     if [[ -f "${last_update_file}" ]]; then
         verbose "Checking whether ${last_update_url} is different than ${last_update_file}"
 
-        if diff -b <(curl -Ls "${last_update_url}" || true) "${last_update_file}" >/dev/null; then
+        if diff -b <(curl -Ls --max-time 10 "${last_update_url}" || true) "${last_update_file}" >/dev/null; then
             verbose "Files are identical, doing partial sync"
             verbose "Syncing ${rsync_uri}${last_update_sync}"
 
