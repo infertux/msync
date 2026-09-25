@@ -22,3 +22,36 @@ jobs:
 
       - name: Run tests
         run: ./test.sh
+
+      - name: Publish coverage
+        run: |
+          COVERAGE=$(jq -r '.total.lines.percent | tonumber | (. * 100 | round) / 100' coverage/coverage.json)
+
+          {
+            echo "## Coverage"
+            echo
+            echo "**${COVERAGE}%**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage for Pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: coverage/
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
