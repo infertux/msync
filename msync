@@ -24,6 +24,7 @@ Options:
   --quiet                  Force quiet mode
   --checksum [0|1]         Whether to use checksum (0 = no, 1 = yes, empty (default) = random)
   --skip-connection-check  Skip initial connection check to rsync daemon
+  --ssl (or --tls)         Use rsync-ssl helper (requires rsync 3.2.0 or newer; implies --skip-connection-check)
   --dry-run                Don't perform actual transfer but shows what would happen
   --last-update-url        Use timestamp file to do partial sync and save bandwidth
   --last-update-sync       Use with --last-update-url
@@ -40,12 +41,27 @@ rsync_cmd() {
     local source=$1
     local destination=${2:-}
 
-    local -a cmd=(ionice -c 3 rsync)
+    local -a cmd=(ionice -c 3)
+
+    if [[ -n "${ssl}" ]]; then
+      cmd+=(rsync-ssl)
+
+      # XXX: make sure these RSYNC_SSL_* variables are declared because the rsync-ssl helper is checking for them which breaks with `set -u` set by msync
+      # TODO: ideally this should be fixed upstream though
+      export RSYNC_SSL_TYPE=${RSYNC_SSL_TYPE:-}
+      export RSYNC_SSL_CERT=${RSYNC_SSL_CERT:-}
+      export RSYNC_SSL_KEY=${RSYNC_SSL_KEY:-}
+      export RSYNC_SSL_SKIP_HOSTNAME_CHECK=${RSYNC_SSL_SKIP_HOSTNAME_CHECK:-}
+    else
+      cmd+=(rsync)
+      cmd+=("--contimeout=60") # --contimeout cannot be used with rsync-ssl
+    fi
+
     cmd+=(--human-readable --no-motd --recursive)
     cmd+=(--times --perms)
     cmd+=(--links --safe-links --hard-links --sparse)
     cmd+=(--delete-delay --delay-updates "--temp-dir=${temp_dir}")
-    cmd+=("--contimeout=60" "--timeout=600")
+    cmd+=("--timeout=600")
 
     # set checksum=1 to force checksum when data corruption is present
     if [[ "${checksum}" = 1 ]]; then
@@ -119,6 +135,7 @@ last_update_sync=""
 last_update_url=""
 random_delay=1
 skip_connection_check=""
+ssl=""
 temporary_directory="/srv/tmp"
 warning_timeout=3600
 
@@ -143,6 +160,7 @@ while true; do
     --random-delay) shift; random_delay=$1; shift;;
     --rsync-option) shift; rsync_options+=("$1"); shift;;
     --skip-connection-check) skip_connection_check=1; shift;;
+    --ssl|--tls) ssl=1; skip_connection_check=1; shift;;
     --temporary-directory) shift; temporary_directory=$1; shift;;
     --verbose) verbose=1; shift;;
     --warning-timeout) shift; warning_timeout=$1; shift;;
