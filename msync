@@ -174,7 +174,7 @@ verbose "Verbose mode is on"
 exec 9>"${lock_file}"
 flock -n 9 || { verbose "${lock_file} present, exiting."; exit 0; }
 
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 exit_handler() {
     [[ "${SECONDS}" -le "${warning_timeout}" ]] || warn "msync took ${SECONDS} s"
 

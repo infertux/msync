@@ -1,2 +1,2 @@
-SimpleCov.add_filter '.git'
-SimpleCov.add_filter 'test.sh'
+SimpleCov.skip '.git'
+SimpleCov.skip 'test.sh'
